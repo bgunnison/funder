@@ -46,8 +46,17 @@ class PLPlotter:
             button_frame = tk.Frame(plot_window)
             button_frame.pack(fill=tk.X)
 
+            font_button = ("Segoe UI", 10, "bold")
+
             for stock in self.stocks:
-                button = tk.Button(button_frame, text=stock, command=lambda s=stock: self.plot_stock_pl(s))
+                button = tk.Button(
+                    button_frame,
+                    text=stock,
+                    command=lambda s=stock: self.plot_stock_pl(s),
+                    font=font_button,
+                    bg="#c8e6c9",
+                    fg="#000000",
+                )
                 button.pack(side=tk.LEFT, padx=5, pady=5)
 
             fig = plt.figure(figsize=(10, 6))
