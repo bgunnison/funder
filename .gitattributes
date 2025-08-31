@@ -1,0 +1,21 @@
+# Normalize line endings to Windows CRLF for text files
+# Ensures the repo stores LF and working tree uses CRLF on checkout
+* text=auto eol=crlf
+
+# Common project files
+*.py      text eol=crlf
+*.md      text eol=crlf
+*.txt     text eol=crlf
+*.sln     text eol=crlf
+*.pyproj  text eol=crlf
+*.csv     text eol=crlf
+*.json    text eol=crlf
+*.ps1     text eol=crlf
+*.bat     text eol=crlf
+
+# Treat common binary assets as binary (no eol conversion)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary

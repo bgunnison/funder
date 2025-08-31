@@ -416,3 +416,8 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Data files
+# Ignore all CSV and JSON data/config files
+*.csv
+*.json

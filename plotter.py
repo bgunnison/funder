@@ -11,6 +11,14 @@ class PLPlotter:
         self.totals_csv_file = totals_csv_file
         self.csv_file = csv_file
         self.stocks = stocks
+        # Basic styling to align with main GUI without changing behavior
+        self.bg_main = "#f0f0f0"
+        self.bg_panel = "#ffffff"
+        self.bg_header = "#e0e0e0"
+        self.font_label = ("Segoe UI", 10)
+        self.font_button = ("Segoe UI", 10, "bold")
+        self.btn_bg = "#bbdefb"
+        self.btn_fg = "#000000"
 
     def plot(self):
         try:
@@ -42,13 +50,26 @@ class PLPlotter:
 
             plot_window = tk.Toplevel(self.root)
             plot_window.title("P/L Over Time")
+            plot_window.configure(bg=self.bg_main)
 
-            button_frame = tk.Frame(plot_window)
-            button_frame.pack(fill=tk.X)
+            # Header/button area
+            button_frame = tk.Frame(plot_window, bg=self.bg_main, relief=tk.RAISED, borderwidth=1)
+            button_frame.pack(fill=tk.X, padx=10, pady=8)
 
             for stock in self.stocks:
-                button = tk.Button(button_frame, text=stock, command=lambda s=stock: self.plot_stock_pl(s))
-                button.pack(side=tk.LEFT, padx=5, pady=5)
+                button = tk.Button(
+                    button_frame,
+                    text=stock,
+                    command=lambda s=stock: self.plot_stock_pl(s),
+                    font=self.font_button,
+                    bg=self.btn_bg,
+                    fg=self.btn_fg
+                )
+                button.pack(side=tk.LEFT, padx=5, pady=6)
+
+            # Plot area
+            plot_frame = tk.Frame(plot_window, bg=self.bg_panel, relief=tk.SUNKEN, borderwidth=1)
+            plot_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
 
             fig = plt.figure(figsize=(10, 6))
             plt.plot(timestamps, pls, marker='o')
@@ -59,7 +80,7 @@ class PLPlotter:
             plt.xticks(rotation=45)
             plt.tight_layout()
 
-            canvas = FigureCanvasTkAgg(fig, master=plot_window)
+            canvas = FigureCanvasTkAgg(fig, master=plot_frame)
             canvas.draw()
             canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
@@ -87,17 +108,22 @@ class PLPlotter:
 
             plot_window = tk.Toplevel(self.root)
             plot_window.title(f"P/L Over Time for {ticker}")
+            plot_window.configure(bg=self.bg_main)
+
+            plot_frame = tk.Frame(plot_window, bg=self.bg_panel, relief=tk.SUNKEN, borderwidth=1)
+            plot_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
             fig = plt.figure(figsize=(10, 6))
             plt.plot(timestamps, pls, marker='o')
             plt.xlabel("Date from inception")
             plt.ylabel("Profit/Loss ($)")
+
             plt.title(f"Portfolio P/L Over Time for {ticker}")
             plt.grid(True)
             plt.xticks(rotation=45)
             plt.tight_layout()
 
-            canvas = FigureCanvasTkAgg(fig, master=plot_window)
+            canvas = FigureCanvasTkAgg(fig, master=plot_frame)
             canvas.draw()
             canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 

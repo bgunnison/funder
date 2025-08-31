@@ -22,6 +22,11 @@ class StockPortfolioTracker:
         self.logger = PortfolioLogger()
         self.running = False
         self.gui_update_queue = queue.Queue()
+        # Track scheduled GUI callbacks and closing state to avoid Tk errors on exit
+        self._after_id = None
+        self._closing = False
+        # Intercept window close to cancel scheduled callbacks cleanly
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         
         # Create GUI
         print("Creating GUI...")
@@ -40,10 +45,10 @@ class StockPortfolioTracker:
         # programmatically via `initialize_portfolio_button_click` if needed.
         
         # Start GUI update processing
-        self.root.after(100, self.process_gui_queue)
+        self._after_id = self.root.after(100, self.process_gui_queue)
         
-        # Show initial message
-        self.gui.text_output.insert(tk.END, "Application started. Loading saved portfolio if available...\n")
+        # Show initial message via queued logger (thread-safe)
+        self._log("Application started. Loading saved portfolio if available...\n")
 
         print("GUI created successfully")
 
@@ -59,7 +64,7 @@ class StockPortfolioTracker:
                 threading.Thread(target=self.update_portfolio, daemon=True).start()
         except Exception as e:
             # Log any errors during startup loading but continue execution
-            self.gui.text_output.insert(tk.END, f"Error loading saved portfolio on startup: {e}\n")
+            self._log(f"Error loading saved portfolio on startup: {e}\n")
 
     def plot_pl(self):
         plotter = PLPlotter(self.root, self.logger.totals_csv_file, self.logger.csv_file, self.portfolio.stocks)
@@ -68,19 +73,19 @@ class StockPortfolioTracker:
     def initialize_portfolio_button_click(self):
         """Handle initialize button click"""
         try:
-            self.gui.text_output.insert(tk.END, "Initializing portfolio...\n")
+            self._log("Initializing portfolio...\n")
             self.initialize_portfolio()
             
             # Start tracking after initialization
             if not self.running:
                 self._start_tracking_threads()
-                self.gui.text_output.insert(tk.END, "Started automatic hourly updates.\n")
+                self._log("Started automatic hourly updates.\n")
             else:
                 # Trigger immediate update
                 threading.Thread(target=self.update_portfolio, daemon=True).start()
                 
         except Exception as e:
-            self.gui.text_output.insert(tk.END, f"Error initializing: {e}\n")
+            self._log(f"Error initializing: {e}\n")
             messagebox.showerror("Error", f"Failed to initialize: {e}")
 
     def add_stock(self, ticker, perc, shares, purchase_price, current_price, company_name):
@@ -94,14 +99,14 @@ class StockPortfolioTracker:
                 0,
                 self.portfolio.calculate_totals(self.fetcher.get_current_prices(self.portfolio.stocks))[1]
             )
-            self.gui.text_output.insert(tk.END, f"Added {ticker} to portfolio.\n")
+            self._log(f"Added {ticker} to portfolio.\n")
         except Exception as e:
-            self.gui.text_output.insert(tk.END, f"Error adding stock: {e}\n")
+            self._log(f"Error adding stock: {e}\n")
             messagebox.showerror("Error", f"Error adding stock: {e}")
 
     def load_portfolio(self):
         try:
-            self.gui.text_output.insert(tk.END, "Loading saved portfolio...\n")
+            self._log("Loading saved portfolio...\n")
             config = self.logger.load_portfolio()
             
             if config:
@@ -163,7 +168,7 @@ class StockPortfolioTracker:
                         )
                     except Exception as e:
                         # Log but don't interrupt the loading process
-                        self.gui.text_output.insert(tk.END, f"Warning: could not save updated company names: {e}\n")
+                        self._log(f"Warning: could not save updated company names: {e}\n")
 
                 self.gui.entry_investment.delete(0, tk.END)
                 self.gui.entry_investment.insert(0, str(self.portfolio.total_investment))
@@ -231,17 +236,17 @@ class StockPortfolioTracker:
 
                 threading.Thread(target=fetch_missing_names_on_load, daemon=True).start()
 
-                self.gui.text_output.insert(tk.END, f"Loaded {len(self.portfolio.stocks)} stocks. Hourly updates will run automatically.\n")
+                self._log(f"Loaded {len(self.portfolio.stocks)} stocks. Hourly updates will run automatically.\n")
 
                 # Start tracking if not already running
                 if not self.running:
                     self._start_tracking_threads()
                     
             else:
-                self.gui.text_output.insert(tk.END, "No saved portfolio found.\n")
+                self._log("No saved portfolio found.\n")
                 
         except Exception as e:
-            self.gui.text_output.insert(tk.END, f"Failed to load portfolio: {e}\n")
+            self._log(f"Failed to load portfolio: {e}\n")
             messagebox.showerror("Error", f"Failed to load portfolio: {e}")
 
     def initialize_portfolio(self):
@@ -278,7 +283,7 @@ class StockPortfolioTracker:
             if not stocks:
                 raise ValueError("No stocks entered. Add at least one stock.")
 
-            self.gui.text_output.insert(tk.END, f"Fetching prices for {len(stocks)} stocks...\n")
+            self._log(f"Fetching prices for {len(stocks)} stocks...\n")
             
             # Fetch prices in background
             def fetch_and_init():
@@ -317,35 +322,37 @@ class StockPortfolioTracker:
                                 'company_name': company_name
                             })
                     
-                    self.gui.text_output.insert(tk.END, "Portfolio initialized successfully!\n")
+                    self._log("Portfolio initialized successfully!\n")
                     
                     # Trigger immediate update
                     self.update_portfolio()
                     
                 except Exception as e:
-                    self.gui.text_output.insert(tk.END, f"Error during initialization: {e}\n")
+                    self._log(f"Error during initialization: {e}\n")
             
             threading.Thread(target=fetch_and_init, daemon=True).start()
             
         except ValueError as e:
-            self.gui.text_output.insert(tk.END, f"Input error: {e}\n")
+            self._log(f"Input error: {e}\n")
             messagebox.showerror("Error", str(e))
         except Exception as e:
-            self.gui.text_output.insert(tk.END, f"Error: {e}\n")
+            self._log(f"Error: {e}\n")
             messagebox.showerror("Error", f"An error occurred: {e}")
 
     def update_portfolio(self):
+        if self._closing:
+            return
         if not self.portfolio.stocks:
-            self.gui.text_output.insert(tk.END, "No stocks to update.\n")
+            self._log("No stocks to update.\n")
             return
             
-        self.gui.text_output.insert(tk.END, f"Updating prices at {datetime.now().strftime('%H:%M:%S')}...\n")
+        self._log(f"Updating prices at {datetime.now().strftime('%H:%M:%S')}...\n")
         
         try:
             prices = self.fetcher.get_current_prices(self.portfolio.stocks)
             
             if not prices:
-                self.gui.text_output.insert(tk.END, "No prices fetched.\n")
+                self._log("No prices fetched.\n")
                 return
                 
             # Update each stock row
@@ -392,10 +399,10 @@ class StockPortfolioTracker:
             # Log totals
             self.logger.log_totals(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), total_pl, total_value)
             
-            self.gui.text_output.insert(tk.END, f"Update complete. Total value: ${total_value:,.2f}\n")
+            self._log(f"Update complete. Total value: ${total_value:,.2f}\n")
             
         except Exception as e:
-            self.gui.text_output.insert(tk.END, f"Update error: {e}\n")
+            self._log(f"Update error: {e}\n")
 
     def run_schedule(self):
         while self.running:
@@ -415,7 +422,7 @@ class StockPortfolioTracker:
             scheduler_thread = threading.Thread(target=self.run_schedule, daemon=True)
             scheduler_thread.start()
             
-            self.gui.text_output.insert(tk.END, "Started hourly update schedule.\n")
+            self._log("Started hourly update schedule.\n")
 
     def on_stock_data_change(self, row_index, field_name, new_value):
         try:
@@ -433,7 +440,7 @@ class StockPortfolioTracker:
                     try:
                         total_cost = float(new_value)
                     except ValueError:
-                        self.gui.text_output.insert(tk.END, f"Invalid purchase price entered for row {row_index + 1}. Please enter a numeric value.\n")
+                        self._log(f"Invalid purchase price entered for row {row_index + 1}. Please enter a numeric value.\n")
                         return
                     shares = self.portfolio.shares[row_index] if row_index < len(self.portfolio.shares) else 0
                     # If shares are available, compute the per‑share cost. If
@@ -505,7 +512,7 @@ class StockPortfolioTracker:
                         if self.portfolio.total_investment > 0:
                             self.portfolio.allocations[row_index] = (new_shares * self.portfolio.initial_prices[row_index]) / self.portfolio.total_investment * 100
                 except ValueError as e:
-                    self.gui.text_output.insert(tk.END, f"Invalid shares entered for row {row_index + 1}: {e}\n")
+                    self._log(f"Invalid shares entered for row {row_index + 1}: {e}\n")
                     return
 
             # Save changes
@@ -547,12 +554,12 @@ class StockPortfolioTracker:
                 'days_owned': days_owned
             })
 
-            self.gui.text_output.insert(tk.END, f"Updated {field_name} for row {row_index + 1}\n")
+            self._log(f"Updated {field_name} for row {row_index + 1}\n")
             
         except ValueError as e:
-            self.gui.text_output.insert(tk.END, f"Invalid input: {e}\n")
+            self._log(f"Invalid input: {e}\n")
         except Exception as e:
-            self.gui.text_output.insert(tk.END, f"Update error: {e}\n")
+            self._log(f"Update error: {e}\n")
 
     def delete_stock_row(self, row_index: int) -> None:
         """Delete a stock row from the portfolio and update the GUI and saved config.
@@ -582,9 +589,9 @@ class StockPortfolioTracker:
                 self.portfolio.purchase_dates,
                 company_names=company_names,
             )
-            self.gui.text_output.insert(tk.END, f"Deleted row {row_index + 1} ({ticker})\n")
+            self._log(f"Deleted row {row_index + 1} ({ticker})\n")
         except Exception as e:
-            self.gui.text_output.insert(tk.END, f"Error deleting row: {e}\n")
+            self._log(f"Error deleting row: {e}\n")
             messagebox.showerror("Error", f"Error deleting row: {e}")
 
     def update_company_name(self, row_index, ticker):
@@ -599,6 +606,9 @@ class StockPortfolioTracker:
             print(f"Error updating company name: {e}")
 
     def process_gui_queue(self):
+        # If the window is closing or destroyed, stop processing
+        if self._closing or not self.root.winfo_exists():
+            return
         try:
             while True:
                 update = self.gui_update_queue.get_nowait()
@@ -607,51 +617,117 @@ class StockPortfolioTracker:
                     row_index = update['row_index']
                     if row_index < len(self.gui.entry_rows):
                         row = self.gui.entry_rows[row_index]
-                        # Column indices have shifted due to the row number column.
-                        # Current price is at index 6, P/L at index 7, Days owned at index 9.
-                        # Update current price
-                        row[6].config(state='normal')
-                        row[6].delete(0, tk.END)
-                        row[6].insert(0, f"{update['current_price']:.2f}")
-                        row[6].config(state='readonly')
-                        # Update P/L
-                        row[7].config(state='normal')
-                        row[7].delete(0, tk.END)
-                        row[7].insert(0, f"{update['pl']:.2f}")
-                        row[7].config(state='readonly')
-                        # Update days owned
-                        row[9].config(state='normal')
-                        row[9].delete(0, tk.END)
-                        row[9].insert(0, str(update['days_owned']))
-                        row[9].config(state='readonly')
+                        try:
+                            # Column indices have shifted due to the row number column.
+                            # Current price is at index 6, P/L at index 7, Days owned at index 9.
+                            # Update current price
+                            if row[6].winfo_exists():
+                                row[6].config(state='normal')
+                                row[6].delete(0, tk.END)
+                                row[6].insert(0, f"{update['current_price']:.2f}")
+                                row[6].config(state='readonly')
+                            # Update P/L
+                            if row[7].winfo_exists():
+                                row[7].config(state='normal')
+                                row[7].delete(0, tk.END)
+                                row[7].insert(0, f"{update['pl']:.2f}")
+                                row[7].config(state='readonly')
+                            # Update days owned
+                            if row[9].winfo_exists():
+                                row[9].config(state='normal')
+                                row[9].delete(0, tk.END)
+                                row[9].insert(0, str(update['days_owned']))
+                                row[9].config(state='readonly')
+                        except tk.TclError:
+                            # Widgets may have been destroyed during shutdown; ignore
+                            pass
                         
                 elif update['type'] == 'total_update':
-                    self.gui.update_totals(
-                        update['total_pl'],
-                        update['total_value'],
-                        update['current_time']
-                    )
+                    try:
+                        self.gui.update_totals(
+                            update['total_pl'],
+                            update['total_value'],
+                            update['current_time']
+                        )
+                    except tk.TclError:
+                        pass
                     
                 elif update['type'] == 'company_name_update':
                     row_index = update['row_index']
                     if row_index < len(self.gui.entry_rows):
                         row = self.gui.entry_rows[row_index]
-                        # Company name is now at index 3 due to the row number column
-                        row[3].config(state='normal')
-                        row[3].delete(0, tk.END)
-                        row[3].insert(0, update['company_name'])
-                        row[3].config(state='readonly')
+                        try:
+                            # Company name is now at index 3 due to the row number column
+                            if row[3].winfo_exists():
+                                row[3].config(state='normal')
+                                row[3].delete(0, tk.END)
+                                row[3].insert(0, update['company_name'])
+                                row[3].config(state='readonly')
+                        except tk.TclError:
+                            pass
 
                 elif update['type'] == 'log_message':
                     # Append the log message to the output text box. Doing
                     # this through the queue ensures that GUI updates occur
                     # on the main thread.
-                    self.gui.text_output.insert(tk.END, update['message'])
+                    try:
+                        if (
+                            not self._closing and
+                            getattr(self, 'gui', None) is not None and
+                            getattr(self.gui, 'text_output', None) is not None and
+                            self.gui.text_output.winfo_exists()
+                        ):
+                            self.gui.text_output.insert(tk.END, update['message'])
+                    except tk.TclError:
+                        pass
                         
         except queue.Empty:
             pass
         finally:
-            self.root.after(100, self.process_gui_queue)
+            # Reschedule only if still active
+            if not self._closing and self.root.winfo_exists():
+                try:
+                    self._after_id = self.root.after(100, self.process_gui_queue)
+                except tk.TclError:
+                    # Root may be in the process of closing; ignore
+                    pass
+
+    def _on_close(self):
+        # Prevent further scheduling and cancel any pending after callbacks
+        self._closing = True
+        # Stop schedule loop and clear jobs
+        try:
+            self.running = False
+            schedule.clear()
+        except Exception:
+            pass
+        try:
+            if self._after_id is not None:
+                self.root.after_cancel(self._after_id)
+        except tk.TclError:
+            pass
+        # Optionally stop background threads here if needed
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+
+    def _log(self, message: str):
+        """Thread-safe log to the GUI text box via queue. No-op when closing."""
+        try:
+            if self._closing:
+                return
+            # If GUI exists, enqueue; else print fallback
+            if self.root and self.root.winfo_exists():
+                self.gui_update_queue.put({'type': 'log_message', 'message': message})
+            else:
+                print(message, end="")
+        except Exception:
+            # As a last resort, print to console
+            try:
+                print(message, end="")
+            except Exception:
+                pass
 
     def run(self):
         print("Starting main GUI loop...")
