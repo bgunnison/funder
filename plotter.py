@@ -19,6 +19,14 @@ class PLPlotter:
         self.font_button = ("Segoe UI", 10, "bold")
         self.btn_bg = "#bbdefb"
         self.btn_fg = "#000000"
+        # Same pastel palette used in the main GUI for symbol fields
+        self.row_colors = [
+            "#c8e6c9",  # light green
+            "#bbdefb",  # light blue
+            "#ffcdd2",  # light pink
+            "#ffecb3",  # light amber
+            "#e1bee7",  # light purple
+        ]
 
     def plot(self):
         try:
@@ -56,13 +64,14 @@ class PLPlotter:
             button_frame = tk.Frame(plot_window, bg=self.bg_main, relief=tk.RAISED, borderwidth=1)
             button_frame.pack(fill=tk.X, padx=10, pady=8)
 
-            for stock in self.stocks:
+            for idx, stock in enumerate(self.stocks):
+                color = self.row_colors[idx % len(self.row_colors)]
                 button = tk.Button(
                     button_frame,
                     text=stock,
                     command=lambda s=stock: self.plot_stock_pl(s),
                     font=self.font_button,
-                    bg=self.btn_bg,
+                    bg=color,
                     fg=self.btn_fg
                 )
                 button.pack(side=tk.LEFT, padx=5, pady=6)
@@ -97,10 +106,15 @@ class PLPlotter:
             with open(self.csv_file, 'r') as f:
                 reader = csv.reader(f)
                 next(reader)  # Skip header
+                tnorm = ticker.strip().upper()
                 for row in reader:
-                    if row[2] == ticker:
-                        timestamps.append(datetime.strptime(row[0], '%Y-%m-%d %H:%M:%S'))
-                        pls.append(float(row[7]))
+                    try:
+                        if len(row) >= 8 and row[2].strip().upper() == tnorm:
+                            timestamps.append(datetime.strptime(row[0].strip(), '%Y-%m-%d %H:%M:%S'))
+                            pls.append(float(row[7]))
+                    except Exception:
+                        # Skip malformed rows
+                        continue
 
             if not timestamps:
                 messagebox.showinfo("No Data", f"No P/L data to plot for {ticker}.")

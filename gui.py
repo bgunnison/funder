@@ -20,6 +20,15 @@ class StockPortfolioGUI:
         self.font_button = ("Segoe UI", 10, "bold")
         self.font_header = ("Segoe UI", 10, "bold")
 
+        # Pastel colors to rotate per stock row (matches button theme)
+        self.row_colors = [
+            "#c8e6c9",  # light green
+            "#bbdefb",  # light blue
+            "#ffcdd2",  # light pink
+            "#ffecb3",  # light amber
+            "#e1bee7",  # light purple
+        ]
+
         self._create_widgets()
 
     def _create_widgets(self):
@@ -88,12 +97,29 @@ class StockPortfolioGUI:
     def add_stock_row(self, ticker="", perc="", shares=0, purchase_price="", current_price=0, purchase_date=None, company_name="-"):
         row_num = len(self.entry_rows) + 1
         row_entries = []
+        # Choose a pastel background color for this row's symbol field only
+        symbol_bg = self.row_colors[(row_num - 1) % len(self.row_colors)]
 
-        def create_editable_entry(column, initial_text, width, field_name):
+        def create_editable_entry(column, initial_text, width, field_name, bg=None):
             str_var = tk.StringVar(value=str(initial_text))
-            entry = tk.Entry(self.frame_table, width=width, textvariable=str_var, font=self.font_label, bg="#ffffff", fg="#000000")
+            entry_kwargs = {
+                'width': width,
+                'textvariable': str_var,
+                'font': self.font_label,
+                'fg': '#000000',
+            }
+            if bg:
+                entry_kwargs['bg'] = bg
+                entry_kwargs['disabledbackground'] = bg
+            else:
+                entry_kwargs['bg'] = '#ffffff'
+            entry = tk.Entry(self.frame_table, **entry_kwargs)
             entry.grid(row=row_num, column=column, padx=5, pady=2, sticky="nsew")
-            str_var.trace_add("write", lambda name, index, mode, sv=str_var, col=column, r_num=row_num: self._on_entry_change(sv, col, r_num))
+            # Use dynamic row resolution so callbacks stay correct after deletions/reordering
+            str_var.trace_add(
+                "write",
+                lambda name, index, mode, sv=str_var, col=column, ent=entry: self._on_entry_change_dynamic(sv, col, ent)
+            )
             return entry, str_var
 
         def create_readonly_entry(column, text, width):
@@ -111,7 +137,7 @@ class StockPortfolioGUI:
         row_entries.append(perc_entry)
 
         # Sym (editable) now at column 2
-        ticker_entry, ticker_str_var = create_editable_entry(2, ticker, 10, "ticker")
+        ticker_entry, ticker_str_var = create_editable_entry(2, ticker, 10, "ticker", bg=symbol_bg)
         row_entries.append(ticker_entry)
 
         # Name (readonly) now at column 3
@@ -153,6 +179,8 @@ class StockPortfolioGUI:
         row_entries.append(create_readonly_entry(9, days_owned_value, 12))
 
         self.entry_rows.append(row_entries)
+        # Ensure symbol colors are consistent after adding
+        self._recolor_symbol_column()
 
     def _on_entry_change(self, str_var, col, row_num):
         field_map = {
@@ -166,6 +194,28 @@ class StockPortfolioGUI:
         if field_name and self.on_stock_data_change_callback:
             new_value = str_var.get()
             self.on_stock_data_change_callback(row_num - 1, field_name, new_value)
+
+    def _on_entry_change_dynamic(self, str_var, col, entry_widget):
+        """Resolve row index from the widget's current grid position.
+        This keeps callbacks accurate after row deletions/reindexing.
+        """
+        try:
+            info = entry_widget.grid_info()
+            # Grid rows are 1-based in our table (row 0 is header)
+            current_row = int(info.get('row', 1)) - 1
+        except Exception:
+            current_row = 0
+        field_map = {
+            1: "perc_invested",
+            2: "ticker",
+            4: "shares_owned",
+            5: "purchase_price",
+            8: "purchase_date"
+        }
+        field_name = field_map.get(col)
+        if field_name and self.on_stock_data_change_callback:
+            new_value = str_var.get()
+            self.on_stock_data_change_callback(current_row, field_name, new_value)
 
     def clear_rows(self):
         for row in self.entry_rows:
@@ -187,6 +237,8 @@ class StockPortfolioGUI:
                     widget.delete(0, tk.END)
                     widget.insert(0, str(i + 1))
                     widget.config(state='readonly')
+        # Recolor the symbol column to match new ordering
+        self._recolor_symbol_column()
 
     def _on_delete_row(self):
         row_str = self.entry_delete_row.get().strip()
@@ -215,3 +267,19 @@ class StockPortfolioGUI:
         self.entry_total_pl.delete(0, tk.END)
         self.entry_total_pl.insert(0, f"{total_pl:,.2f}")
         self.entry_total_pl.config(state='readonly')
+
+    def _recolor_symbol_column(self) -> None:
+        """Apply rotating pastel background to only the Sym (ticker) column.
+        Keeps other columns unchanged and updates colors after add/delete.
+        """
+        try:
+            for i, row in enumerate(self.entry_rows):
+                color = self.row_colors[i % len(self.row_colors)]
+                if len(row) > 2:
+                    sym_entry = row[2]
+                    try:
+                        sym_entry.configure(bg=color)
+                    except Exception:
+                        pass
+        except Exception:
+            pass

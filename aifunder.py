@@ -397,7 +397,60 @@ class StockPortfolioTracker:
             })
             
             # Log totals
-            self.logger.log_totals(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), total_pl, total_value)
+            ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            self.logger.log_totals(ts, total_pl, total_value)
+
+            # Also log per‑stock snapshot so the plotter has data to draw
+            try:
+                for i, (ticker, shares, initial_price, pdate) in enumerate(
+                    zip(self.portfolio.stocks, self.portfolio.shares, self.portfolio.initial_prices, self.portfolio.purchase_dates)
+                ):
+                    current_price = prices.get(ticker)
+                    if current_price is None:
+                        continue
+                    allocation = 0.0
+                    try:
+                        allocation = float(self.portfolio.allocations[i]) if i < len(self.portfolio.allocations) else 0.0
+                    except Exception:
+                        allocation = 0.0
+                    try:
+                        name = self.fetcher.company_cache.get(ticker, ticker)
+                    except Exception:
+                        name = ticker
+                    try:
+                        shares_f = float(shares) if shares else 0.0
+                        init_price_f = float(initial_price) if initial_price else 0.0
+                        curr_price_f = float(current_price)
+                        pl_val = (curr_price_f - init_price_f) * shares_f
+                    except Exception:
+                        shares_f = 0.0
+                        init_price_f = float(initial_price) if initial_price else 0.0
+                        curr_price_f = float(current_price) if current_price is not None else 0.0
+                        pl_val = 0.0
+                    # Days owned (string or number)
+                    if pdate and str(pdate).strip():
+                        try:
+                            days_owned = (datetime.now() - datetime.strptime(str(pdate), '%Y-%m-%d')).days
+                        except Exception:
+                            days_owned = ""
+                    else:
+                        days_owned = ""
+                    # Write row to CSV
+                    self.logger.log_portfolio(
+                        ts,
+                        ticker,
+                        allocation,
+                        name,
+                        shares_f,
+                        init_price_f,
+                        curr_price_f,
+                        pl_val,
+                        pdate if pdate else "",
+                        days_owned,
+                        total_value,
+                    )
+            except Exception as e:
+                self._log(f"Logging error: {e}\n")
             
             self._log(f"Update complete. Total value: ${total_value:,.2f}\n")
             
