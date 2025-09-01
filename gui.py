@@ -1,11 +1,12 @@
 import tkinter as tk
 from tkinter import messagebox
+from tkinter import ttk
 from datetime import datetime
 
 class StockPortfolioGUI:
-    def __init__(self, root, add_stock_callback, load_portfolio_callback, on_stock_data_change_callback, delete_row_callback, plot_pl_callback):
+    def __init__(self, root, add_stock_callback, load_portfolio_callback, on_stock_data_change_callback, delete_row_callback, plot_pl_callback, update_portfolio_callback):
         self.root = root
-        self.root.title("AI Infrastructure Stock Portfolio Tracker")
+        self.root.title("Portfolio tracker")
         self.root.configure(bg="#f0f0f0")
 
         self.entry_rows = []
@@ -14,6 +15,7 @@ class StockPortfolioGUI:
         self.on_stock_data_change_callback = on_stock_data_change_callback
         self.delete_row_callback = delete_row_callback
         self.plot_pl_callback = plot_pl_callback
+        self.update_portfolio_callback = update_portfolio_callback
 
         # Fonts
         self.font_label = ("Segoe UI", 10)
@@ -81,6 +83,9 @@ class StockPortfolioGUI:
         self.button_plot = tk.Button(button_frame, text="Plot P/L", command=self.plot_pl_callback, font=self.font_button, bg="#ffcdd2", fg="#000000")
         self.button_plot.pack(side=tk.LEFT, padx=5)
 
+        self.button_update = tk.Button(button_frame, text="Update", command=self.update_portfolio_callback, font=self.font_button, bg="#c8e6c9", fg="#000000")
+        self.button_update.pack(side=tk.LEFT, padx=5)
+
         delete_frame = tk.Frame(button_frame, bg="#f0f0f0")
         delete_frame.pack(side=tk.RIGHT, padx=5)
 
@@ -89,6 +94,44 @@ class StockPortfolioGUI:
 
         self.entry_delete_row = tk.Entry(delete_frame, width=5, font=self.font_label)
         self.entry_delete_row.pack(side=tk.LEFT, padx=5)
+
+        # Spinner/progress indicator for updates (hidden by default)
+        self.update_spinner = ttk.Progressbar(button_frame, mode='indeterminate', length=120)
+        # Not packed initially; shown when updating
+
+    def set_updating(self, updating: bool):
+        try:
+            if updating:
+                # Disable update button and show spinner
+                try:
+                    self.button_update.config(state='disabled')
+                except Exception:
+                    pass
+                if not getattr(self.update_spinner, '_visible', False):
+                    self.update_spinner.pack(side=tk.LEFT, padx=5)
+                    self.update_spinner._visible = True
+                try:
+                    self.update_spinner.start(10)
+                except Exception:
+                    pass
+            else:
+                # Enable update button and hide spinner
+                try:
+                    self.update_spinner.stop()
+                except Exception:
+                    pass
+                if getattr(self.update_spinner, '_visible', False):
+                    try:
+                        self.update_spinner.pack_forget()
+                    except Exception:
+                        pass
+                    self.update_spinner._visible = False
+                try:
+                    self.button_update.config(state='normal')
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def _create_output_text(self):
         self.text_output = tk.Text(self.root, height=5, width=90, font=self.font_label, relief=tk.SUNKEN, borderwidth=1)
@@ -156,7 +199,19 @@ class StockPortfolioGUI:
         row_entries.append(current_price_entry)
 
         # Profit/Loss (readonly) now at column 7
-        row_entries.append(create_readonly_entry(7, f"{(float(current_price) - float(purchase_price or 0)) * shares:.2f}", 15))
+        pl_numeric = (float(current_price) - float(purchase_price or 0)) * shares
+        pl_entry = create_readonly_entry(7, f"{pl_numeric:.2f}", 15)
+        # Color code P/L cell: green for positive, red for negative, neutral for zero/invalid
+        try:
+            if pl_numeric > 0:
+                pl_entry.configure(readonlybackground="#c8e6c9")  # light green
+            elif pl_numeric < 0:
+                pl_entry.configure(readonlybackground="#ffcdd2")  # light red/pink
+            else:
+                pl_entry.configure(readonlybackground="#f0f0f0")  # neutral
+        except Exception:
+            pass
+        row_entries.append(pl_entry)
         
         # Date Purchased (editable) now at column 8
         if not purchase_date:
@@ -258,7 +313,7 @@ class StockPortfolioGUI:
         self.entry_delete_row.delete(0, tk.END)
 
     def update_totals(self, total_pl, total_value, current_time):
-        self.root.title(f"AI Stock Portfolio Tracker - Total Value: ${total_value:,.2f}")
+        self.root.title("Portfolio tracker")
         self.entry_last_update.config(state='normal')
         self.entry_last_update.delete(0, tk.END)
         self.entry_last_update.insert(0, current_time)

@@ -110,6 +110,9 @@ class DataFetcher:
         prices: dict[str, float | None] = {}
 
         for ticker in tickers:
+            # Skip empty or invalid tickers silently
+            if ticker is None or str(ticker).strip() == "":
+                continue
             start = time.perf_counter()
             price: float | None = None
 

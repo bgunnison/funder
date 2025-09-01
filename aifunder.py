@@ -22,6 +22,9 @@ class StockPortfolioTracker:
         self.logger = PortfolioLogger()
         self.running = False
         self.gui_update_queue = queue.Queue()
+        # Prevent concurrent updates
+        self._updating = False
+        self._update_lock = threading.Lock()
         # Track scheduled GUI callbacks and closing state to avoid Tk errors on exit
         self._after_id = None
         self._closing = False
@@ -37,6 +40,7 @@ class StockPortfolioTracker:
             self.on_stock_data_change,
             self.delete_stock_row,
             self.plot_pl,
+            self.update_now,
         )
         
         # Removed the explicit "Initialize/Update Portfolio" button. The application now
@@ -69,6 +73,16 @@ class StockPortfolioTracker:
     def plot_pl(self):
         plotter = PLPlotter(self.root, self.logger.totals_csv_file, self.logger.csv_file, self.portfolio.stocks)
         plotter.plot()
+
+    def update_now(self):
+        # Do nothing if an update is already running
+        if self._updating:
+            self._log("Update already in progress. Please wait...\n")
+            return
+        try:
+            threading.Thread(target=self.update_portfolio, daemon=True).start()
+        except Exception as e:
+            self._log(f"Error starting update: {e}\n")
 
     def initialize_portfolio_button_click(self):
         """Handle initialize button click"""
@@ -345,9 +359,20 @@ class StockPortfolioTracker:
         if not self.portfolio.stocks:
             self._log("No stocks to update.\n")
             return
-            
+
+        # Acquire non-blocking lock to prevent concurrent updates
+        if not self._update_lock.acquire(blocking=False):
+            self._log("Update already in progress. Skipping.\n")
+            return
+        self._updating = True
+        # Notify GUI to show spinner
+        try:
+            self.gui_update_queue.put({'type': 'update_status', 'updating': True})
+        except Exception:
+            pass
+
         self._log(f"Updating prices at {datetime.now().strftime('%H:%M:%S')}...\n")
-        
+
         try:
             prices = self.fetcher.get_current_prices(self.portfolio.stocks)
             
@@ -456,6 +481,18 @@ class StockPortfolioTracker:
             
         except Exception as e:
             self._log(f"Update error: {e}\n")
+        finally:
+            # Always release lock/state
+            try:
+                self._updating = False
+                self._update_lock.release()
+            except Exception:
+                pass
+            # Notify GUI to hide spinner
+            try:
+                self.gui_update_queue.put({'type': 'update_status', 'updating': False})
+            except Exception:
+                pass
 
     def run_schedule(self):
         while self.running:
@@ -479,8 +516,18 @@ class StockPortfolioTracker:
 
     def on_stock_data_change(self, row_index, field_name, new_value):
         try:
-            if row_index >= len(self.portfolio.stocks):
-                return  # Row doesn't exist in portfolio yet
+            # Ensure portfolio arrays are long enough for this row
+            target_len = row_index + 1
+            while len(self.portfolio.stocks) < target_len:
+                self.portfolio.stocks.append("")
+            while len(self.portfolio.allocations) < target_len:
+                self.portfolio.allocations.append(0.0)
+            while len(self.portfolio.shares) < target_len:
+                self.portfolio.shares.append(0.0)
+            while len(self.portfolio.initial_prices) < target_len:
+                self.portfolio.initial_prices.append(0.0)
+            while len(self.portfolio.purchase_dates) < target_len:
+                self.portfolio.purchase_dates.append("")
                 
             if field_name == "purchase_price":
                 # Treat the purchase price as the total amount spent to acquire
@@ -679,11 +726,22 @@ class StockPortfolioTracker:
                                 row[6].delete(0, tk.END)
                                 row[6].insert(0, f"{update['current_price']:.2f}")
                                 row[6].config(state='readonly')
-                            # Update P/L
+                            # Update P/L and color-code cell (green positive, red negative)
                             if row[7].winfo_exists():
                                 row[7].config(state='normal')
                                 row[7].delete(0, tk.END)
                                 row[7].insert(0, f"{update['pl']:.2f}")
+                                # Apply background based on value
+                                try:
+                                    pl_val = float(update['pl'])
+                                    if pl_val > 0:
+                                        row[7].configure(readonlybackground="#c8e6c9")  # light green
+                                    elif pl_val < 0:
+                                        row[7].configure(readonlybackground="#ffcdd2")  # light red/pink
+                                    else:
+                                        row[7].configure(readonlybackground="#f0f0f0")  # neutral
+                                except Exception:
+                                    pass
                                 row[7].config(state='readonly')
                             # Update days owned
                             if row[9].winfo_exists():
@@ -702,6 +760,12 @@ class StockPortfolioTracker:
                             update['total_value'],
                             update['current_time']
                         )
+                    except tk.TclError:
+                        pass
+                    
+                elif update['type'] == 'update_status':
+                    try:
+                        self.gui.set_updating(bool(update.get('updating')))
                     except tk.TclError:
                         pass
                     
