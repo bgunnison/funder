@@ -8,6 +8,7 @@ class PortfolioManager:
         self.total_investment = 0
         self.initial_prices = []
         self.purchase_dates = []
+        self.description = ""
 
     def initialize_portfolio(self, total_investment, stocks, allocations, prices, purchase_prices=None, purchase_dates=None):
         if total_investment <= 0:

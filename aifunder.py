@@ -41,6 +41,8 @@ class StockPortfolioTracker:
             self.delete_stock_row,
             self.plot_pl,
             self.update_now,
+            get_description_callback=lambda: getattr(self.portfolio, 'description', ""),
+            save_description_callback=self.save_portfolio_description,
         )
         
         # Removed the explicit "Initialize/Update Portfolio" button. The application now
@@ -130,6 +132,11 @@ class StockPortfolioTracker:
                 self.portfolio.shares = config["shares"]
                 self.portfolio.initial_prices = config["initial_prices"]
                 self.portfolio.purchase_dates = config.get("purchase_dates", [datetime.now().strftime('%Y-%m-%d')] * len(self.portfolio.stocks))
+                # Optional descriptive text about the portfolio
+                try:
+                    self.portfolio.description = config.get("description", "")
+                except Exception:
+                    self.portfolio.description = ""
 
                 # Load any saved company names from the config and populate
                 # the fetcher's cache. This avoids re-querying the API on
@@ -179,6 +186,7 @@ class StockPortfolioTracker:
                             self.portfolio.initial_prices,
                             self.portfolio.purchase_dates,
                             company_names=fetched_names,
+                            description=getattr(self.portfolio, 'description', ""),
                         )
                     except Exception as e:
                         # Log but don't interrupt the loading process
@@ -324,7 +332,8 @@ class StockPortfolioTracker:
                         self.portfolio.shares,
                         self.portfolio.initial_prices,
                         self.portfolio.purchase_dates,
-                        company_names=company_names
+                        company_names=company_names,
+                        description=getattr(self.portfolio, 'description', ""),
                     )
                     
                     # Update GUI with fetched company names
@@ -618,7 +627,9 @@ class StockPortfolioTracker:
             # Save changes
             self.logger.save_portfolio(
                 self.portfolio.total_investment, self.portfolio.stocks, self.portfolio.allocations,
-                self.portfolio.shares, self.portfolio.initial_prices, self.portfolio.purchase_dates
+                self.portfolio.shares, self.portfolio.initial_prices, self.portfolio.purchase_dates,
+                company_names=[self.fetcher.company_cache.get(t, t) for t in self.portfolio.stocks],
+                description=getattr(self.portfolio, 'description', "")
             )
 
             # Immediately recompute and update the profit/loss and days owned for
@@ -688,6 +699,7 @@ class StockPortfolioTracker:
                 self.portfolio.initial_prices,
                 self.portfolio.purchase_dates,
                 company_names=company_names,
+                description=getattr(self.portfolio, 'description', ""),
             )
             self._log(f"Deleted row {row_index + 1} ({ticker})\n")
         except Exception as e:
@@ -704,6 +716,30 @@ class StockPortfolioTracker:
             })
         except Exception as e:
             print(f"Error updating company name: {e}")
+
+    def save_portfolio_description(self, text: str):
+        try:
+            # Ensure attribute exists on portfolio
+            try:
+                self.portfolio.description = text
+            except Exception:
+                # Fallback: attach dynamically
+                setattr(self.portfolio, 'description', text)
+            # Include company names currently known so we don't drop them
+            company_names = [self.fetcher.company_cache.get(t, t) for t in self.portfolio.stocks]
+            self.logger.save_portfolio(
+                self.portfolio.total_investment,
+                self.portfolio.stocks,
+                self.portfolio.allocations,
+                self.portfolio.shares,
+                self.portfolio.initial_prices,
+                self.portfolio.purchase_dates,
+                company_names=company_names,
+                description=text,
+            )
+            self._log("Saved portfolio description.\n")
+        except Exception as e:
+            self._log(f"Failed to save description: {e}\n")
 
     def process_gui_queue(self):
         # If the window is closing or destroyed, stop processing

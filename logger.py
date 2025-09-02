@@ -33,7 +33,7 @@ class PortfolioLogger:
             writer = csv.writer(f)
             writer.writerow([timestamp, f"{total_pl:.2f}", f"{total_value:.2f}"])
 
-    def save_portfolio(self, total_investment, stocks, allocations, shares, initial_prices, purchase_dates, company_names=None):
+    def save_portfolio(self, total_investment, stocks, allocations, shares, initial_prices, purchase_dates, company_names=None, description=None):
         """
         Persist the current portfolio configuration to a JSON file. In addition to
         the standard fields, an optional list of company names may be provided.
@@ -68,6 +68,16 @@ class PortfolioLogger:
         }
         if company_names is not None:
             config["company_names"] = company_names
+        if description is not None:
+            config["description"] = description
+        # Create a .bak backup of the existing JSON before writing
+        try:
+            if os.path.exists(self.config_file):
+                import shutil
+                shutil.copy2(self.config_file, self.config_file + ".bak")
+        except Exception:
+            # Non-fatal if backup fails
+            pass
         with open(self.config_file, 'w') as f:
             json.dump(config, f, indent=4)
 

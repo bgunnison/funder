@@ -4,7 +4,7 @@ from tkinter import ttk
 from datetime import datetime
 
 class StockPortfolioGUI:
-    def __init__(self, root, add_stock_callback, load_portfolio_callback, on_stock_data_change_callback, delete_row_callback, plot_pl_callback, update_portfolio_callback):
+    def __init__(self, root, add_stock_callback, load_portfolio_callback, on_stock_data_change_callback, delete_row_callback, plot_pl_callback, update_portfolio_callback, get_description_callback=None, save_description_callback=None):
         self.root = root
         self.root.title("Portfolio tracker")
         self.root.configure(bg="#f0f0f0")
@@ -16,6 +16,8 @@ class StockPortfolioGUI:
         self.delete_row_callback = delete_row_callback
         self.plot_pl_callback = plot_pl_callback
         self.update_portfolio_callback = update_portfolio_callback
+        self.get_description_callback = get_description_callback
+        self.save_description_callback = save_description_callback
 
         # Fonts
         self.font_label = ("Segoe UI", 10)
@@ -44,21 +46,33 @@ class StockPortfolioGUI:
         self.frame_input.pack(anchor="w", pady=10, padx=10, fill="x")
 
         self.label_investment = tk.Label(self.frame_input, text="Total Investment ($):", bg="#f0f0f0", font=self.font_label)
-        self.label_investment.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        # Info button to edit portfolio description
+        self.button_edit_desc = tk.Button(
+            self.frame_input,
+            text="?",
+            font=("Segoe UI", 10, "bold"),
+            width=2,
+            command=self._open_description_editor,
+            bg="#e1bee7",
+            fg="#000000"
+        )
+        # Place the '?' button to the left of the label
+        self.button_edit_desc.grid(row=0, column=0, padx=(0, 5), pady=5, sticky="w")
+        self.label_investment.grid(row=0, column=1, padx=5, pady=5, sticky="w")
         self.entry_investment = tk.Entry(self.frame_input, font=self.font_label)
-        self.entry_investment.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+        self.entry_investment.grid(row=0, column=2, padx=5, pady=5, sticky="w")
         self.entry_investment.insert(0, "100000")
 
         self.label_last_update = tk.Label(self.frame_input, text="Last Updated:", bg="#f0f0f0", font=self.font_label)
-        self.label_last_update.grid(row=0, column=2, padx=5, pady=5, sticky="w")
+        self.label_last_update.grid(row=0, column=3, padx=5, pady=5, sticky="w")
         self.entry_last_update = tk.Entry(self.frame_input, width=20, font=self.font_label)
-        self.entry_last_update.grid(row=0, column=3, padx=5, pady=5, sticky="w")
+        self.entry_last_update.grid(row=0, column=4, padx=5, pady=5, sticky="w")
         self.entry_last_update.insert(0, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
         self.label_total_pl = tk.Label(self.frame_input, text="Total P/L ($):", bg="#f0f0f0", font=self.font_label)
-        self.label_total_pl.grid(row=0, column=4, padx=5, pady=5, sticky="w")
+        self.label_total_pl.grid(row=0, column=5, padx=5, pady=5, sticky="w")
         self.entry_total_pl = tk.Entry(self.frame_input, width=20, font=self.font_label)
-        self.entry_total_pl.grid(row=0, column=5, padx=5, pady=5, sticky="w")
+        self.entry_total_pl.grid(row=0, column=6, padx=5, pady=5, sticky="w")
         self.entry_total_pl.config(state='readonly')
 
     def _create_table_frame(self):
@@ -96,7 +110,7 @@ class StockPortfolioGUI:
         self.entry_delete_row.pack(side=tk.LEFT, padx=5)
 
         # Spinner/progress indicator for updates (hidden by default)
-        self.update_spinner = ttk.Progressbar(button_frame, mode='indeterminate', length=120)
+        self.update_spinner = RotatingSpinner(button_frame, size=18, line_width=3, fg="#4a90e2")
         # Not packed initially; shown when updating
 
     def set_updating(self, updating: bool):
@@ -111,7 +125,7 @@ class StockPortfolioGUI:
                     self.update_spinner.pack(side=tk.LEFT, padx=5)
                     self.update_spinner._visible = True
                 try:
-                    self.update_spinner.start(10)
+                    self.update_spinner.start(80)
                 except Exception:
                     pass
             else:
@@ -338,3 +352,164 @@ class StockPortfolioGUI:
                         pass
         except Exception:
             pass
+
+    def _open_description_editor(self):
+        try:
+            # Retrieve current description via callback if provided
+            current_text = ""
+            try:
+                if callable(self.get_description_callback):
+                    current_text = self.get_description_callback() or ""
+            except Exception:
+                current_text = ""
+
+            win = tk.Toplevel(self.root)
+            win.title("Portfolio Description")
+            win.configure(bg="#f0f0f0")
+            win.transient(self.root)
+            win.grab_set()
+
+            tk.Label(win, text="Describe this portfolio:", bg="#f0f0f0", font=self.font_label).pack(anchor="w", padx=10, pady=(10, 4))
+            text_widget = tk.Text(win, width=70, height=8, font=self.font_label, wrap="word")
+            text_widget.pack(padx=10, pady=4, fill="both", expand=True)
+            text_widget.insert("1.0", current_text)
+
+            btn_frame = tk.Frame(win, bg="#f0f0f0")
+            btn_frame.pack(fill="x", padx=10, pady=(4, 10))
+
+            def on_save():
+                new_text = text_widget.get("1.0", "end").strip()
+                try:
+                    if callable(self.save_description_callback):
+                        self.save_description_callback(new_text)
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to save description: {e}")
+                finally:
+                    try:
+                        win.destroy()
+                    except Exception:
+                        pass
+
+            def on_cancel():
+                try:
+                    win.destroy()
+                except Exception:
+                    pass
+
+            tk.Button(btn_frame, text="Save", font=self.font_button, bg="#c8e6c9", fg="#000000", command=on_save).pack(side=tk.RIGHT, padx=5)
+            tk.Button(btn_frame, text="Cancel", font=self.font_button, bg="#ffcdd2", fg="#000000", command=on_cancel).pack(side=tk.RIGHT)
+
+        except Exception:
+            # Fail silently to avoid breaking main UI
+            pass
+
+
+class RotatingSpinner(tk.Canvas):
+    """A lightweight rotating spinner using Canvas lines.
+    Provides start(delay_ms) and stop() methods like ttk.Progressbar.
+    """
+    def __init__(self, parent, size=18, line_width=3, fg="#4a90e2", trail=8):
+        # Canvas background matches parent to blend in
+        parent_bg = None
+        try:
+            parent_bg = parent.cget('bg')
+        except Exception:
+            parent_bg = "#f0f0f0"
+        super().__init__(parent, width=size, height=size, highlightthickness=0, bg=parent_bg)
+        self.size = size
+        self.line_width = line_width
+        self.fg = fg
+        self.bg = parent_bg
+        self.trail = max(3, int(trail))
+        self._items = []
+        self._steps = 12
+        self._phase = 0
+        self._job = None
+        self._visible = False
+        self._delay_ms = 80
+        self._build()
+
+    def _build(self):
+        self.delete("all")
+        cx = cy = self.size / 2
+        inner = self.size * 0.20
+        outer = self.size / 2 - max(1, self.line_width / 2)
+        # Pre-create spokes for efficient updates
+        import math
+        self._items = []
+        for i in range(self._steps):
+            a = 2 * math.pi * (i / self._steps)
+            x0 = cx + inner * math.cos(a)
+            y0 = cy + inner * math.sin(a)
+            x1 = cx + outer * math.cos(a)
+            y1 = cy + outer * math.sin(a)
+            item = self.create_line(x0, y0, x1, y1,
+                                    width=self.line_width,
+                                    capstyle=tk.ROUND,
+                                    fill=self._color_for_spoke(i))
+            self._items.append(item)
+
+    def _hex_to_rgb(self, h):
+        h = h.lstrip('#')
+        return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+
+    def _rgb_to_hex(self, rgb):
+        return '#%02x%02x%02x' % rgb
+
+    def _blend(self, fg_rgb, bg_rgb, alpha):
+        # alpha in [0,1]: 1=fg, 0=bg
+        r = int(fg_rgb[0] * alpha + bg_rgb[0] * (1 - alpha))
+        g = int(fg_rgb[1] * alpha + bg_rgb[1] * (1 - alpha))
+        b = int(fg_rgb[2] * alpha + bg_rgb[2] * (1 - alpha))
+        return (r, g, b)
+
+    def _color_for_spoke(self, index):
+        # Determine intensity based on distance from head (phase)
+        d = (index - self._phase) % self._steps
+        if d < self.trail:
+            alpha = 1.0 - (d / self.trail)  # fade from 1 to 0
+        else:
+            alpha = 0.12  # dim rest
+        try:
+            fg_rgb = self._hex_to_rgb(self.fg)
+        except Exception:
+            fg_rgb = (74, 144, 226)  # default blue
+        try:
+            bg_rgb = self._hex_to_rgb(self.bg) if isinstance(self.bg, str) and self.bg.startswith('#') else (240, 240, 240)
+        except Exception:
+            bg_rgb = (240, 240, 240)
+        mixed = self._blend(fg_rgb, bg_rgb, alpha)
+        return self._rgb_to_hex(mixed)
+
+    def _tick(self):
+        # Advance phase and recolor spokes
+        self._phase = (self._phase + 1) % self._steps
+        for i, item in enumerate(self._items):
+            try:
+                self.itemconfigure(item, fill=self._color_for_spoke(i))
+            except Exception:
+                pass
+        self._job = self.after(self._delay_ms, self._tick)
+
+    def start(self, delay_ms=80):
+        try:
+            self._delay_ms = int(delay_ms) if delay_ms else 80
+        except Exception:
+            self._delay_ms = 80
+        if self._job is None:
+            self._tick()
+
+    def stop(self):
+        if self._job is not None:
+            try:
+                self.after_cancel(self._job)
+            except Exception:
+                pass
+            self._job = None
+        # Reset so the leading spoke starts at top next time
+        self._phase = 0
+        for i, item in enumerate(self._items):
+            try:
+                self.itemconfigure(item, fill=self._color_for_spoke(i))
+            except Exception:
+                pass

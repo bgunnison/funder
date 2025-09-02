@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from ai import open_stock_ai_window
 from datetime import datetime
 import csv
 
@@ -57,7 +58,7 @@ class PLPlotter:
                 return
 
             plot_window = tk.Toplevel(self.root)
-            plot_window.title("P/L Over Time")
+            plot_window.title("Portfolio Profit/Loss Total")
             plot_window.configure(bg=self.bg_main)
 
             # Header/button area
@@ -84,7 +85,6 @@ class PLPlotter:
             plt.plot(timestamps, pls, marker='o')
             plt.xlabel("Date from inception")
             plt.ylabel("Profit/Loss ($)")
-            plt.title("Portfolio P/L Over Time")
             plt.grid(True)
             plt.xticks(rotation=45)
             plt.tight_layout()
@@ -121,8 +121,21 @@ class PLPlotter:
                 return
 
             plot_window = tk.Toplevel(self.root)
-            plot_window.title(f"P/L Over Time for {ticker}")
+            plot_window.title(f"Profit/Loss for {ticker}")
             plot_window.configure(bg=self.bg_main)
+
+            # Top bar with '?' to open AI analysis window
+            top_bar = tk.Frame(plot_window, bg=self.bg_main)
+            top_bar.pack(fill=tk.X, padx=10, pady=(8, 4))
+            tk.Button(
+                top_bar,
+                text="?",
+                font=("Segoe UI", 10, "bold"),
+                width=2,
+                bg="#e1bee7",
+                fg="#000000",
+                command=lambda s=ticker: open_stock_ai_window(plot_window, s)
+            ).pack(side=tk.RIGHT)
 
             plot_frame = tk.Frame(plot_window, bg=self.bg_panel, relief=tk.SUNKEN, borderwidth=1)
             plot_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -131,8 +144,6 @@ class PLPlotter:
             plt.plot(timestamps, pls, marker='o')
             plt.xlabel("Date from inception")
             plt.ylabel("Profit/Loss ($)")
-
-            plt.title(f"Portfolio P/L Over Time for {ticker}")
             plt.grid(True)
             plt.xticks(rotation=45)
             plt.tight_layout()
