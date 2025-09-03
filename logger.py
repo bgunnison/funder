@@ -1,3 +1,10 @@
+# Copyright (c) 2025 Brian Gunnison
+"""Persistence utilities for the portfolio tracker.
+
+Handles CSV append-only logs for per-stock snapshots and portfolio totals,
+and JSON configuration read/write with optional backups.
+"""
+
 import csv
 import json
 import os

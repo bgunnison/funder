@@ -1,3 +1,11 @@
+# Copyright (c) 2025 Brian Gunnison
+"""AI assistant window for per‑stock analysis.
+
+Provides a Tkinter UI to store a per‑ticker prompt and render the last AI
+answer. Persists prompts/answers/API key in portfolio_config.json and backs up
+the file before saving. Uses OpenAI Chat Completions over HTTPS.
+"""
+
 import json
 import os
 import tkinter as tk

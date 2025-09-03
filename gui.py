@@ -1,3 +1,11 @@
+# Copyright (c) 2025 Brian Gunnison
+"""GUI layer for the portfolio tracker built with Tkinter.
+
+Provides the main window layout, input controls, stock rows table, and
+lightweight UX elements (spinner, dialogs). Exposes callbacks for controller
+logic and emits user changes back to the app.
+"""
+
 import tkinter as tk
 from tkinter import messagebox
 from tkinter import ttk

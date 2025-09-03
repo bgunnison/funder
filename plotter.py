@@ -1,3 +1,10 @@
+# Copyright (c) 2025 Brian Gunnison
+"""Plotting utilities for portfolio and per-stock P/L using Matplotlib.
+
+Embeds figures into Tkinter windows. Provides an overall P/L plot and an
+individual per‑stock plot window with an integration hook for AI analysis.
+"""
+
 import tkinter as tk
 from tkinter import messagebox
 import matplotlib.pyplot as plt

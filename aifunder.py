@@ -1,3 +1,13 @@
+# Copyright (c) 2025 Brian Gunnison
+"""Main application entrypoint and controller for the portfolio tracker.
+
+Responsibilities:
+- Initialize and wire GUI, data fetcher, portfolio manager, and logger.
+- Load/save configuration, including company names and description text.
+- Schedule and run periodic updates; handle manual updates.
+- Process a thread-safe GUI update queue to mutate widgets on the main thread.
+"""
+
 import queue
 import tkinter as tk
 from tkinter import messagebox

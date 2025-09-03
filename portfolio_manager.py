@@ -1,3 +1,11 @@
+# Copyright (c) 2025 Brian Gunnison
+"""In-memory portfolio state and basic calculations.
+
+Stores tickers, allocations, shares, prices, dates, and a free-form
+description. Provides initialization, mutation, totals calculation, and
+deletion helpers independent of the GUI.
+"""
+
 from datetime import datetime
 
 class PortfolioManager:

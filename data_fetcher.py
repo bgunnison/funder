@@ -1,3 +1,11 @@
+# Copyright (c) 2025 Brian Gunnison
+"""External market data retrieval helpers.
+
+Fetches current prices and company names using external providers (e.g.,
+Alpha Vantage, Finnhub). Implements basic rate limiting, provider fallback,
+and simple caching.
+"""
+
 import requests
 from datetime import datetime, timedelta
 import time
